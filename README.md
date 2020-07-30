@@ -1,2 +1,5 @@
 # pathPlanningPaperAndCodes
-lulu is the cutest!
+1. 闫尧, 李春书, 唐风敏. 基于五次多项式模型的自主车辆换道轨迹规划. 机械设计. 2019;36(8):42–7.   
+2. Chen C, He Y, Bu C, Han J, Zhang X. Quartic Bézier curve based trajectory generation for autonomous vehicles with curvature and velocity constraints. In: 2014 IEEE International Conference on Robotics and Automation (ICRA). IEEE; 2014. p. 6108–6113. 
+
+
