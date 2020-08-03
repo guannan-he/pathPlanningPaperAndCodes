@@ -1,62 +1,58 @@
 clear;
 clc;
-load 'track_352.mat';%Ô­Ê¼ÈüµÀĞÅÏ¢
-load 'body.mat';%³µÁ¾ĞÅÏ¢
-%% Æ½»¬²åÖµÈüµÀ
-tolerance = 5;%ÏÈÏßĞÔ²åÖµ£¬È¥µô´ó¼äÏ¶£¬²½³¤²»Òª´óÓÚÏÂÒ»²½µÄ¶ş±¶£¨¾­Ñé£©
+load 'track_352.mat';%åŸå§‹èµ›é“ä¿¡æ¯
+load 'body.mat';%è½¦è¾†ä¿¡æ¯
+safe_dist = 2;%è·ç¦»éšœç¢ç‰©å®‰å…¨è·ç¦»
+%% å¹³æ»‘æ’å€¼èµ›é“
+tolerance = 5;%å…ˆçº¿æ€§æ’å€¼ï¼Œå»æ‰å¤§é—´éš™ï¼Œæ­¥é•¿ä¸è¦å¤§äºä¸‹ä¸€æ­¥çš„äºŒå€ï¼ˆç»éªŒï¼‰
 [track_x,track_y] = track_smooth_linear(track_x,track_y,tolerance);
-tolerance = 3;%È»ºóÈı´ÎÑùÌõÏß²åÖµ£¬´ïµ½×îÖÕ²½³¤
+tolerance = 3;%ç„¶åä¸‰æ¬¡æ ·æ¡çº¿æ’å€¼ï¼Œè¾¾åˆ°æœ€ç»ˆæ­¥é•¿
 [track_x,track_y] = track_smooth_spline(track_x,track_y,tolerance);
-%% ÇóµÃÓëÈüµÀ³¤¶È¶ÔÓ¦µÄÑùÌõÏß²ÎÊı
+
+%% æ±‚å¾—ä¸èµ›é“é•¿åº¦å¯¹åº”çš„æ ·æ¡çº¿å‚æ•°
 [c,~] = size(track_x);
-[spline_A] = spline_matrix_gen(c);%ÑùÌõÏßÇó½â¾ØÕó£¬ÒªÁôÔÚÄÚ´æÖĞ£¬¼ÓËÙ¼ÆËã
+[spline_A] = spline_matrix_gen(c);%æ ·æ¡çº¿æ±‚è§£çŸ©é˜µï¼Œè¦ç•™åœ¨å†…å­˜ä¸­ï¼ŒåŠ é€Ÿè®¡ç®—
 para_x = spline_A * track_x;
 para_y = spline_A * track_y;
 
-%% µ¥Î»ÇĞÏòÁ¿
+%% å•ä½åˆ‡å‘é‡
 [vector] = vector_gen(para_x,para_y,c);
 
-%% »æÖÆÖĞĞÄÏß¡¢×óÓÒ±ß½ç¼°ÕÏ°­Îï
+%% ç»˜åˆ¶ä¸­å¿ƒçº¿ã€å·¦å³è¾¹ç•ŒåŠéšœç¢ç‰©
 draw_track(track_x,track_y,vector,track_w,obs_x,obs_y,c);
 clear x_l y_l x_r y_r;
 
-%% µÚÒ»´ÎQPÓÅ»¯
-alpha = zeros(c,1);
-[H,F] = HF_gen(spline_A,para_x,para_y,track_x,track_y,vector,c);
-[lb,ub] = update_lub(track_w,body.Wb,alpha,c);
-[Aeq,beq] = eq_gen(c);
-[Aieq,bieq] = ieq_gen(track_x,track_y,obs_x,obs_y,track_w,body.Wb,obs_w,alpha,c);
-alpha_last = alpha;
-alpha = quadprog(H,F,Aieq,bieq,Aeq,beq,lb,ub);
-draw_optimised_patn(track_x,track_y,vector,alpha,'m');
-%% µÚ¶ş´ÎQPÓÅ»¯
-alpha = alpha_last * 1 / 3 + alpha * 2 / 3;%¸üĞÂalpha
-[track_x,track_y] = path_gen(track_x,track_y,vector,alpha);%¸üĞÂÖĞĞÄÏß
-para_x = spline_A * track_x;
-para_y = spline_A * track_y;
-[vector] = vector_gen(para_x,para_y,c);%¸üĞÂÏòÁ¿
-[lb,ub] = update_lub(track_w,body.Wb,alpha,c);
-[Aieq,bieq] = ieq_gen(track_x,track_y,obs_x,obs_y,track_w,body.Wb,obs_w,alpha,c);
-alpha_last = alpha;
-alpha = quadprog(H,F,Aieq,bieq,Aeq,beq,lb,ub);
-draw_optimised_patn(track_x,track_y,vector,alpha,'k');
-%% »æÖÆµ¥Î»ÏòÁ¿
-figure(2)
-clf;
-plot(vector(:,1));
-hold on;
-plot(vector(:,2));
+%% QPä¼˜åŒ–åˆå§‹åŒ–
+alpha_out = zeros(c,1);
+alpha_last = zeros(c,1);
+[lb,ub] = init_lub(track_w,body.Wb,c);
+[Aieq,bieq] = init_ieq(track_x,track_y,obs_x,obs_y,safe_dist,c);
+
+%% QPä¼˜åŒ–
+[alpha_out,alpha_last,lb,ub,track_x,track_y,vector] = QP_optimization(spline_A,alpha_out,alpha_last,lb,ub,Aieq,bieq,track_x,track_y,vector,c);
+draw_optimised_path(track_x,track_y,vector,alpha_out,'m');
+[alpha_out,alpha_last,lb,ub,track_x,track_y,vector] = QP_optimization(spline_A,alpha_out,alpha_last,lb,ub,Aieq,bieq,track_x,track_y,vector,c);
+draw_optimised_path(track_x,track_y,vector,alpha_out,'k');
+[alpha_out,alpha_last,lb,ub,track_x,track_y,vector] = QP_optimization(spline_A,alpha_out,alpha_last,lb,ub,Aieq,bieq,track_x,track_y,vector,c);
+draw_optimised_path(track_x,track_y,vector,alpha_out,'c');
+
+%% ç»˜åˆ¶å•ä½å‘é‡
+% figure(2)
+% clf;
+% plot(vector(:,1));
+% hold on;
+% plot(vector(:,2));
 
 
 
 
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%×Óº¯Êı%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%å­å‡½æ•°%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%% Éú³ÉÑùÌõÏßÇó½â¾ØÕó
+%% ç”Ÿæˆæ ·æ¡çº¿æ±‚è§£çŸ©é˜µ
 function [spline_A] = spline_matrix_gen(c) %[a;b;c;d] = A * y
-%% ÊäÈëD
+%% è¾“å…¥D
 D = 3 * [eye(c - 2),zeros(c - 2,2)] -6 * [zeros(c - 2,1),eye(c - 2),zeros(c - 2,1)] + 3 * [zeros(c - 2,2),eye(c - 2)];
 tmp = [-3,3,zeros(1,c - 4),3,-3];
 D = [tmp;D;tmp];
@@ -78,7 +74,7 @@ matrix_b = Ab / A * D + Aby;
 Ad = eye(c) / 6 - [zeros(1,c);[eye(c - 1) / 6,zeros(c - 1,1)]];
 Ad(1,c - 1) = -1 / 6;
 matrix_d = Ad / A * D;
-%% ÕûºÏ
+%% æ•´åˆ
 zero = zeros(c);
 A_sig = [matrix_a,zero,zero,zero
     zero,matrix_b,zero,zero
@@ -88,23 +84,23 @@ Dy = [eye(c);eye(c);eye(c);eye(c)];
 spline_A = A_sig * Dy;
 end
 
-%% Éú³ÉÇĞÏòÁ¿
+%% ç”Ÿæˆåˆ‡å‘é‡
 function [vector] = vector_gen(para_x,para_y,c)
 select_b = [zeros(c),eye(c),zeros(c),zeros(c)];
 Dx = select_b * para_x;
 Dy = select_b * para_y;
-vector = zeros(c,2);%¸Ãµã´¦ÇĞÏòÁ¿
-for i = 1:c%ÇĞÏòÁ¿
+vector = zeros(c,2);%è¯¥ç‚¹å¤„åˆ‡å‘é‡
+for i = 1:c%åˆ‡å‘é‡
     len = sqrt(Dx(i)^2 + Dy(i)^2);
     vector(i,1) = Dx(i) / len;
     vector(i,2) = Dy(i) / len;
-    if isnan(vector(i,1))%ÂËµôNaN
+    if isnan(vector(i,1))%æ»¤æ‰NaN
         vector(i,1) = vector(i - 1,1);
     end
     if isnan(vector(i,2))
         vector(i,2) = vector(i - 1,2);
     end
-    if (i>1)&&(vector(i,1) - vector(i - 1,1) > 1.8)%ÂËµô¹ı´óÌø±ä
+    if (i>1)&&(vector(i,1) - vector(i - 1,1) > 1.8)%æ»¤æ‰è¿‡å¤§è·³å˜
         vector(i,1) = vector(i - 1,1);
     end
     if (i>1)&&(vector(i,2) - vector(i - 1,2) > 1.8)
@@ -113,7 +109,7 @@ for i = 1:c%ÇĞÏòÁ¿
 end
 end
 
-%% »æÖÆÔ­Ê¼ÈüµÀ
+%% ç»˜åˆ¶åŸå§‹èµ›é“
 function [] = draw_track(track_x,track_y,vector,track_w,obs_x,obs_y,c)
 figure(1);
 clf;
@@ -132,7 +128,7 @@ hold on;
 plot(obs_x,obs_y,'r*');
 end
 
-%% Éú³ÉHF¾ØÕó
+%% ç”ŸæˆHFçŸ©é˜µ
 function [H,F] = HF_gen(spline_A,para_x,para_y,track_x,track_y,vector,c)
 select_b = [zeros(c),eye(c),zeros(c),zeros(c)];
 select_c = [zeros(c),zeros(c),eye(c),zeros(c)];
@@ -143,7 +139,7 @@ base = (Dx.^2 + Dy.^2).^3;
 Pxx = diag(Dy.^2 ./ base);
 Pxy = diag(-2 * Dx .* Dy ./ base);
 Pyy = diag(Dx.^2 ./ base);
-Vx = diag(vector(:,2));%alpah×ó¸ºÓÒÕı
+Vx = diag(vector(:,2));%alpahå·¦è´Ÿå³æ­£
 Vy = diag(-vector(:,1));
 Tc = 2 * A;
 Tnx = 2 * A * Vx;
@@ -158,17 +154,23 @@ F = 2 * Tnx' * Pxx' * Tc * track_x ...
 F = F';
 end
 
-%% ¸üĞÂalphaÉÏÏÂÏŞ
-function [lb,ub] = update_lub(track_w,wb,alpha,c)
+%% ä¸Šä¸‹é™åˆå§‹åŒ–
+function [lb,ub] = init_lub(track_w,wb,c)
 hard_bound = track_w / 2 - wb / 2000;
-lb = -hard_bound * ones(c,1) - alpha;
-ub = hard_bound * ones(c,1) - alpha;
+lb = -hard_bound * ones(c,1);
+ub = hard_bound * ones(c,1);
 end
 
-%% Éú³É²»µÈÊ½Ô¼Êø
-function [Aieq,bieq] = ieq_gen(track_x,track_y,obs_x,obs_y,track_w,wb,obs_w,alpha,c)
-hard_bound = track_w / 2 - wb / 2000;
+%% æ›´æ–°ä¸Šä¸‹é™
+function [lb,ub] = update_lub(lb,ub,alpha)
+lb = lb - alpha;
+ub = ub - alpha;
+end
+
+%% ä¸ç­‰å¼çº¦æŸåˆå§‹åŒ–
+function [Aieq,bieq] = init_ieq(track_x,track_y,obs_x,obs_y,safe_dist,c)
 [num_obs,~] = size(obs_x);
+%ç¡®å®šéšœç¢ç‰©ä½ç½®
 distance = zeros(c,num_obs);
 for i = 1:c
     for k = 1:num_obs
@@ -179,40 +181,56 @@ pos = zeros(num_obs,1);
 for k = 1:num_obs
     pos(k) = find(distance(:,k)==min(min(distance(:,k))));
 end
+%åˆ¤æ–­éšœç¢ç‰©å·¦å³ä½ç½®å¹¶ç”Ÿæˆçº¦æŸ
+%æŠŠéšœç¢ç‰©å¤„çš„ç¡¬è¾¹ç•Œæ¢æˆå®‰å…¨è·ç¦»
 Aieq = zeros(num_obs,c);
 bieq = zeros(num_obs,1);
 for k = 1:num_obs
-    if (track_x(pos(k)) - obs_x(k) + track_y(pos(k)) - obs_y(k)) >=0
+    if (track_x(pos(k)) - obs_x(k) + track_y(pos(k)) - obs_y(k)) >=0%éšœç¢ç‰©åœ¨å·¦ï¼ˆä¸‹ï¼‰è¾¹
         Aieq(k,pos(k)) = -1;
-        bieq(k) = hard_bound + alpha(pos(k)) - sqrt(distance(pos(k),k));
-    else
+        bieq(k) = -safe_dist + sqrt(distance(pos(k),k));
+    else%éšœç¢ç‰©åœ¨å³ï¼ˆä¸Šï¼‰è¾¹
         Aieq(k,pos(k)) = 1;
-        bieq(k) = hard_bound - alpha(pos(k)) - sqrt(distance(pos(k),k));
+        bieq(k) = -safe_dist + sqrt(distance(pos(k),k));
     end
 end
 end
 
-%% Éú³ÉµÈÊ½Ô¼Êø
-function [Aeq,beq] = eq_gen(c) %±£Ö¤Ê¼Ä©µãÁ¬Ğø
+%% æ›´æ–°ä¸ç­‰å¼çº¦æŸ
+function [Aieq,bieq] = ieq_update(Aieq,bieq,alpha)
+[posx,posy] = find(Aieq);
+Aieq = Aieq;
+[c,~] = size(posy);
+delta_alpha = zeros(c,1);
+trans = zeros(c);
+for i = 1:c
+    delta_alpha(i) = alpha(posy(i));
+    trans(i,i) = Aieq(posx(i),posy(i));
+end
+bieq = bieq - trans * delta_alpha;
+end
+
+%% ç”Ÿæˆç­‰å¼çº¦æŸ
+function [Aeq,beq] = eq_gen(c) %ä¿è¯å§‹æœ«ç‚¹è¿ç»­
 Aeq = zeros(1,c);
 Aeq(1) = 1;
 Aeq(c) = -1;
 beq = [0];
 end
 
-%% Éú³ÉÂ·¾¶
+%% ç”Ÿæˆè·¯å¾„
 function [p_x,p_y] = path_gen(track_x,track_y,vector,alpha)
 p_x = track_x + alpha .* vector(:,2);
 p_y = track_y - alpha .* vector(:,1);
 end
 
-%% »æÖÆÓÅ»¯ºóÂ·¾¶
-function [] = draw_optimised_patn(track_x,track_y,vector,alpha,color_inpt)
+%% ç»˜åˆ¶ä¼˜åŒ–åè·¯å¾„
+function [] = draw_optimised_path(track_x,track_y,vector,alpha,color_inpt)
 [p_x,p_y] = path_gen(track_x,track_y,vector,alpha);
 plot(p_x,p_y,color_inpt);
 end
 
-%% ÏßĞÔ²åÖµÈüµÀ Ç°´¦Àí
+%% çº¿æ€§æ’å€¼èµ›é“ å‰å¤„ç†
 function [x_out,y_out] = track_smooth_linear(track_x,track_y,tolerance)
 [c,~] = size(track_x);
 x_out = [];
@@ -241,7 +259,7 @@ x_out = [x_out;track_x(i + 1)];
 y_out = [y_out;track_y(i + 1)];
 end
 
-%% Èı´ÎÑùÌõ²åÖµÈüµÀ µÚ¶ş´Î´¦Àí
+%% ä¸‰æ¬¡æ ·æ¡æ’å€¼èµ›é“ ç¬¬äºŒæ¬¡å¤„ç†
 function [x_out,y_out] = track_smooth_spline(track_x,track_y,tolerance)
 [c,~] = size(track_x);
 [spline_A] = spline_matrix_gen(c);
@@ -279,7 +297,22 @@ end
 x_out = [x_out;track_x(i + 1)];
 y_out = [y_out;track_y(i + 1)];
 end
-%%
+
+%% QPä¼˜åŒ–å­ç¨‹åº
+function [alpha_out,alpha_last,lb,ub,track_x,track_y,vector] = QP_optimization(spline_A,alpha,alpha_last,lb,ub,Aieq,bieq,track_x,track_y,vector,c)
+alpha = alpha_last * 1 / 3 + alpha * 2 / 3;%æ›´æ–°alpha
+[track_x,track_y] = path_gen(track_x,track_y,vector,alpha);%æ›´æ–°ä¸­å¿ƒçº¿(è¿™æ¬¡ä¼˜åŒ–çš„å‚è€ƒ)ï¼Œåˆ©ç”¨ä¸Šæ¬¡çš„å‚è€ƒå’Œåæ ‡
+para_x = spline_A * track_x;
+para_y = spline_A * track_y;
+[vector] = vector_gen(para_x,para_y,c);%æ›´æ–°å‘é‡
+[H,F] = HF_gen(spline_A,para_x,para_y,track_x,track_y,vector,c);%æ›´æ–°HF
+[lb,ub] = update_lub(lb,ub,alpha);%æ›´æ–°ä¸Šä¸‹é™
+[Aeq,beq] = eq_gen(c);
+[Aieq,bieq] = ieq_update(Aieq,bieq,alpha);%æ›´æ–°ä¸ç­‰å¼çº¦æŸ
+alpha_last = alpha;
+alpha_out = quadprog(H,F,Aieq,bieq,Aeq,beq,lb,ub);%(è¿™æ¬¡ä¼˜åŒ–åçš„åæ ‡)
+end
+
 %%
 %%
 %%
