@@ -9,6 +9,8 @@
  </div>
    
  
+# View result  
+to view result, run main_prog.m  
 # Update logs  
 - 20200804 path optimization function added  
 - 20200806 velocity profile generation function added  
