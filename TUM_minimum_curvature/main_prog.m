@@ -4,6 +4,7 @@ load 'track_352.mat';%原始赛道信息
 load 'body.mat';%车辆信息
 load 'dynamic_constrains.mat';%动力学约束
 safe_dist = 2;%距离障碍物安全距离
+
 %% 平滑插值赛道
 tolerance = 10;%先线性插值，去掉大间隙
 [track_x,track_y] = track_smooth_linear(track_x,track_y,tolerance);
@@ -53,7 +54,7 @@ clear stop_inter_thres inter_val t lb ub Aieq bieq cnt;
 %% 生成最优路径及其信息
 draw_optimised_path(track_x,track_y,vector,alpha_out,'m');%绘制最优路径
 [track_x,track_y] = path_gen(track_x,track_y,vector,alpha_out);%保存最优路径
-[distance] = path_distance_calculate(track_x,track_y,c);%沿最优路径距离
+[path_distance] = path_distance_calculate(track_x,track_y,c);%沿最优路径距离
 para_x = spline_A * track_x;
 para_y = spline_A * track_y;
 [vector] = vector_gen(para_x,para_y,c);
@@ -65,15 +66,20 @@ clear obs_x obs_y obs_w safe_dist alpha_out alpha_last;
 [apex_location,apex_cnt] = get_apex(curvature_res,c);%标记Apex点
 vmax = 40;%限制最高直线车速
 [vel_geo] = geometry_vel_calculate(curvature_res,vmax,ay_para,c);%计算几何速度限制
-[vel_forward] = forward_calculate(apex_location,apex_cnt,vel_geo,curvature_res,distance,acc_para,ay_para,c);%加速限制
-[vel_backward] = backward_calculate(apex_location,apex_cnt,vel_geo,curvature_res,distance,brk_para,ay_para,c);%减速限制
+[vel_forward] = forward_calculate(apex_location,apex_cnt,vel_geo,curvature_res,path_distance,acc_para,ay_para,c);%加速限制
+[vel_backward] = backward_calculate(apex_location,apex_cnt,vel_geo,curvature_res,path_distance,brk_para,ay_para,c);%减速限制
 vel_profile = min(vel_geo,min(vel_forward,vel_backward));%三种取最小值
-clear apex_location apex_cnt vel_geo vel_forward vel_backward acc_para ay_para brk_para;
+[vel_flying] = init_vel_calculate(vel_profile,vel_profile(end),acc_para,ay_para,path_distance,curvature_res,c);%飞驰圈速度规划
+clear apex_location apex_cnt vel_geo vel_forward vel_backward acc_para ay_para brk_para vmax;
 
 %%
 figure(2);
 clf;
-plot(distance,vel_profile);%绘制速度-距离规划
+plot(path_distance,vel_flying,'r');%绘制速度-距离规划
+xlabel('S\\m');
+ylabel('v\\m*s^-1');
+title('velocity profile');
+
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%路径规划子函数%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -150,7 +156,7 @@ plot(x_l,y_l,'r');
 hold on;
 plot(x_r,y_r,'b');
 hold on;
-plot(track_x(1),track_y(1),'r*');
+plot(track_x(1),track_y(1),'b*');
 hold on;
 plot(obs_x,obs_y,'r*');
 end
@@ -253,8 +259,13 @@ end
 
 %% 绘制优化后路径
 function [] = draw_optimised_path(track_x,track_y,vector,alpha,color_inpt)
+figure(1);
 [p_x,p_y] = path_gen(track_x,track_y,vector,alpha);
 plot(p_x,p_y,color_inpt);
+xlabel('x\\m');
+ylabel('y\\m');
+title('track and path');
+legend('中心线','左边界','右边界','起点','障碍','最小曲率路径');
 end
 
 %% 线性插值赛道 前处理
@@ -342,6 +353,7 @@ end
 
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%速度规划子函数%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 %% 计算路径长度
 function [distance] = path_distance_calculate(track_x,track_y,c)
 distance = zeros(c,1);
@@ -377,25 +389,25 @@ apex_location = find(apex);
 end
 
 %% 卡尔曼滤波
-function [curvature_res] = smooth_curvature_kalman(curvature,c,Q,R)
-curvature_res = zeros(c,1);
-x = curvature(1);
+function [vector_out] = smooth_curvature_kalman(vector_in,c,Q,R)
+vector_out = zeros(c,1);
+x = vector_in(1);
 P = 100;
 % curvature_res(1) = x;
 for i = 1:c
     xnp = x;
     Pnp = P + Q;
     G = Pnp / (Pnp + R);
-    x = xnp + G * (curvature(i) - xnp);
+    x = xnp + G * (vector_in(i) - xnp);
     P = (1 - G) * Pnp;
-    curvature_res(i) = x;
+    vector_out(i) = x;
 end
 end
 
 %% 几何速度(查表法)
 function [vel_geo] = geometry_vel_calculate(curvature_res,vmax,ay_para,c)
 vel_geo = zeros(c,1);
-vel_ran = [5:0.001:40]';
+vel_ran = [5:0.001:vmax]';
 k_v = polyval(ay_para,vel_ran) ./ vel_ran.^2;
 [kv_num,~] = size(k_v);
 for i = 1:c
@@ -403,12 +415,12 @@ for i = 1:c
     while abs(curvature_res(i)) >= k_v(j)
         j = j - 1;
     end
-    vel_geo(i) = min(vel_ran(j - 1),vmax);
+    vel_geo(i) = vel_ran(j - 1);
 end
 end
 
 %% 前向计算加速度
-function [vel_forward] = forward_calculate(apex_location,apex_cnt,vel_geo,curvature,distance,acc_para,ay_para,c)
+function [vel_forward] = forward_calculate(apex_location,apex_cnt,vel_geo,curvature,path_distance,acc_para,ay_para,c)
 vel_forward = zeros(c,1);
 vel_forward(1) = vel_geo(1);
 for i = 1:apex_cnt - 1
@@ -416,7 +428,7 @@ for i = 1:apex_cnt - 1
     for j = apex_location(i) + 1:apex_location(i + 1)
         ax_max = polyval(acc_para,v_ref);
         ay_max = polyval(ay_para,v_ref);
-        delta_s = distance(j) - distance(j - 1);
+        delta_s = path_distance(j) - path_distance(j - 1);
         if ((v_ref^2 * curvature(j - 1)) / (ay_max))^2 < 1%确保车辆不失稳（安全域）
             v_ref = sqrt(v_ref^2 + 2 * delta_s * ax_max * sqrt(1 - ((v_ref^2 * curvature(j - 1)) / (ay_max))^2));
         end
@@ -427,7 +439,7 @@ vel_forward(c) = v_ref;
 end
 
 %% 反向计算减速度
-function [vel_backward] = backward_calculate(apex_location,apex_cnt,vel_geo,curvature,distance,brk_para,ay_para,c)
+function [vel_backward] = backward_calculate(apex_location,apex_cnt,vel_geo,curvature,path_distance,brk_para,ay_para,c)
 vel_backward = zeros(c,1);
 vel_backward(c) = vel_geo(c);
 for i = apex_cnt + 1 - [1:apex_cnt - 1]
@@ -435,7 +447,7 @@ for i = apex_cnt + 1 - [1:apex_cnt - 1]
     for j = apex_location(i) - [1:apex_location(i) - apex_location(i - 1)]
         ax_max = polyval(brk_para,v_ref);
         ay_max = polyval(ay_para,v_ref);
-        delta_s = distance(j + 1) - distance(j);
+        delta_s = path_distance(j + 1) - path_distance(j);
         if ((v_ref^2 * curvature(j + 1)) / (ay_max))^2 < 1%确保车辆不失稳（安全域）
             v_ref = sqrt(v_ref^2 + 2 * delta_s * ax_max * sqrt(1 - ((v_ref^2 * curvature((j + 1)) / (ay_max))^2)));
         end
@@ -444,7 +456,26 @@ for i = apex_cnt + 1 - [1:apex_cnt - 1]
 end
 end
 
+%% 初速度加速计算
+function [vel_out] = init_vel_calculate(vel_profile,vel_start,acc_para,ay_para,path_distance,curvature,c)
+vel_out = zeros(c,1);
+vel_out(1) = vel_start;
+v_ref = vel_start;
+for i = 1:c - 1
+    ax_max = polyval(acc_para,v_ref);
+    ay_max = polyval(ay_para,v_ref);
+    delta_s = path_distance(i + 1) - path_distance(i);
+    if ((v_ref^2 * curvature(i)) / (ay_max))^2 < 1%确保车辆不失稳（安全域）
+        v_ref = sqrt(v_ref^2 + 2 * delta_s * ax_max * sqrt(1 - ((v_ref^2 * curvature(i)) / (ay_max))^2));
+    end
+    vel_out(i + 1) = v_ref;
+end
+vel_out = min(vel_out,vel_profile);
+end
+
 %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%控制子函数%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 %%
 %%
 %%
