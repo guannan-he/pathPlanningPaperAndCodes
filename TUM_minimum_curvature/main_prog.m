@@ -31,7 +31,7 @@ alpha_last = zeros(c,1);%上一次迭代结果
 [Aieq,bieq] = init_ieq(track_x,track_y,obs_x,obs_y,safe_dist,c);%有关障碍物的不等式约束初始化
 stop_inter_thres = c * 0.01;%每一次迭代后所有点上横向改变平方和，每一个点上差别不超过1厘米
 inter_val = 100000;%初始停止条件数值
-cnt = 0;%迭代次数
+path_cnt = 0;%迭代次数
 
 %% QP优化
 %不下降时停止迭代
@@ -39,17 +39,16 @@ tic;
 while inter_val >= stop_inter_thres
     [alpha_out,alpha_last,lb,ub,track_x,track_y,vector] = QP_optimization(spline_A,alpha_out,alpha_last,lb,ub,Aieq,bieq,track_x,track_y,vector,c);
     inter_val = sum(alpha_out.^2);
-    cnt = cnt + 1;
+    path_cnt = path_cnt + 1;
 end
 [c_alpha,~] = size(alpha_out);
 if c_alpha == 0
     alpha_out = zeros(c,1);%以防无解
 end
 clear c_alpha;
-t = toc;
+path_t = toc;
 clc;
-fprintf('迭代%d次，耗时%f秒\n',cnt,t);
-clear stop_inter_thres inter_val t lb ub Aieq bieq cnt;
+clear stop_inter_thres inter_val lb ub Aieq bieq;
 
 %% 生成最优路径及其信息
 draw_optimised_path(track_x,track_y,vector,alpha_out,'m');%绘制最优路径
@@ -58,7 +57,7 @@ draw_optimised_path(track_x,track_y,vector,alpha_out,'m');%绘制最优路径
 para_x = spline_A * track_x;
 para_y = spline_A * track_y;
 [vector] = vector_gen(para_x,para_y,c);
-phi = atan(vector(:,2) ./ vector(:,1));%参考车辆航向角
+[phi] = phi_accum_gen(vector,c);%参考车辆航向角
 [curvature_res] = get_curvature(para_x,para_y,c);%参考曲率
 clear obs_x obs_y obs_w safe_dist alpha_out alpha_last;
 
@@ -70,15 +69,99 @@ vmax = 40;%限制最高直线车速
 [vel_backward] = backward_calculate(apex_location,apex_cnt,vel_geo,curvature_res,path_distance,brk_para,ay_para,c);%减速限制
 vel_profile = min(vel_geo,min(vel_forward,vel_backward));%三种取最小值
 [vel_flying] = init_vel_calculate(vel_profile,vel_profile(end),acc_para,ay_para,path_distance,curvature_res,c);%飞驰圈速度规划
-clear apex_location apex_cnt vel_geo vel_forward vel_backward acc_para ay_para brk_para vmax;
+delta_profile = atan(curvature_res * body.l / 1000);
+clear apex_location apex_cnt vel_geo vel_forward vel_backward acc_para ay_para brk_para vmax vel_profile;
 
-%%
+%% 绘制速度规划
 figure(2);
 clf;
+subplot(2,1,1);
 plot(path_distance,vel_flying,'r');%绘制速度-距离规划
 xlabel('S\\m');
 ylabel('v\\m*s^-1');
-title('velocity profile');
+title('velocity profile and history');
+subplot(2,1,2);
+plot(path_distance,delta_profile,'r');%绘制方向盘转角-距离规划
+xlabel('S\\m');
+ylabel('\delta \\deg');
+title('steering profile and history');
+
+%% 仿真参数设置
+dt = 0.1;%时间间隔
+np = 20;%预测步长
+nc = 10;%控制步长
+nx = 3;%状态量数目
+nu = 2;%控制量数目
+
+%% 参考量设置
+state_ref = [track_x,track_y,phi,curvature_res,vel_flying,path_distance];
+
+%% 物理限制设置
+u_max = [40;0.5];
+u_min = [2;-0.5];
+du_max = [0.2;0.2];
+du_min = [-0.2;-0.2];
+
+%% 车辆参数及状态设置
+l = body.l / 1000;
+target_v = vel_flying(1);%期望速度
+delta = 0;%当前转向角
+travel = 0;%当前里程
+control_d = [0;0];%上一时刻控制偏差
+control_act = [target_v;delta];%当前实际控制值
+control = [control_act];%储存实际控制指令
+x_d = [0;0;0];%当前状态偏差
+x_act = [track_x(1);track_y(1);phi(1)];
+x_res = [x_act];%储存实际状态
+travel_history = [travel];%里程表历史
+
+%% 权重矩阵及观测矩阵生成
+[Qt,Rt,Ct,rou] = weight_matrix_gen(nx,nu,np,nc);
+
+%%
+index = 0;
+tic;
+mpc_cnt = 0;
+while index < c - 1
+    % 矩阵生成↓↓↓
+    [At,Bt] = sequential_increment_matrix_gen(x_act,control_act,Ct,np,nc,body,dt);
+    % 求当前点偏差↓↓↓
+    [x_d,index] = find_state_ref_err(para_x,para_y,state_ref,x_act,travel,c);
+    target_v = vel_flying(index);
+    % 求当前约束↓↓↓
+    [A_eqst,b_eqst,A_ieqst,b_ieqst,lb,ub] = get_constrains(u_max,u_min,du_max,du_min,control_act,nc,nu);
+    % 求最优控制量偏差↓↓↓
+    yita = [x_d;control_d];
+    H = [Bt' * Qt * Bt + Rt,zeros(size(Bt,2),1);zeros(1,size(Bt,2)),rou];
+    H = H + H';%quadprog程序是求1/2H，故将其变为二倍
+    F = [2 * yita' * At' * Qt * Bt,0]';%最后一个对应松弛变量
+    U_out = quadprog(H,F,A_ieqst,b_ieqst,A_eqst,b_eqst,lb,ub);
+    % 求最优控制量↓↓↓
+    delta_des = delta_profile(index);%该点处期望转向角
+    control_act = [target_v;delta_des] + control_d + [U_out(1);U_out(2)];%用得到的控制偏差和上一步的控制偏差修正
+    control_act(1) = min(control_act(1),target_v);
+    control = [control,control_act];%储存
+    control_d = [U_out(1);U_out(2)];%更新当前的控制偏差
+    % 更新并储存状态↓↓↓
+    [x_act,travel] = update_state(x_act,control_act,dt,l,travel);
+    x_res = [x_res,x_act];%储存
+    mpc_cnt = mpc_cnt + 1;
+    travel_history = [travel_history;travel];%储存里程历史
+end
+mpc_t = toc;
+clc;
+clear nc np nu nx index A_eqst A_ieqst b_eqst b_ieqst At Bt Ct dt du_max du_min ...
+    H F control_d control_act delta delta_des l lb ub target_v travel u_max u_min U_out x_act ...
+    x_d yita state_ref t Qt Rt rou cnt;
+x_res = x_res';
+control = control';
+%% 绘制MPC历史
+draw_body_attitude(x_res,control,travel_history,body);
+
+%% 打印计算时间
+fprintf('路径优化：迭代%d次，耗时%f秒\n',path_cnt,path_t);
+fprintf('MPC控制：迭代%d次，耗时%f秒\n',mpc_cnt,mpc_t);
+clear path_cnt path_t mpc_cnt mpc_t;
 
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%路径规划子函数%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -257,6 +340,37 @@ p_x = track_x + alpha .* vector(:,2);
 p_y = track_y - alpha .* vector(:,1);
 end
 
+%% 生成累积航向角
+function [phi_out] = phi_accum_gen(vector,c)
+phi_new = zeros(c,1);
+for i = 1:c%转换为0-360范围
+    phi_abs = abs(atan(vector(i,2) / vector(i,1)));
+    if (vector(i,1) > 0) && (vector(i,2) >= 0)
+        phi_new(i) = phi_abs;
+    end
+    if (vector(i,1) <= 0) && (vector(i,2) > 0)
+        phi_new(i) = pi - phi_abs;
+    end
+    if (vector(i,1) < 0) && (vector(i,2) <= 0)
+        phi_new(i) = pi + phi_abs;
+    end
+    if (vector(i,1) >= 0) && (vector(i,2) < 0)
+        phi_new(i) = 2 * pi - phi_abs;
+    end
+end
+phi_new = phi_new * 180 / pi;
+phi_out = zeros(c,1);
+phi_out(1) = phi_new(1);
+for i = 2:c
+    diff = phi_new(i) - phi_out(i - 1);
+    if abs(diff) > 200
+        phi_new = phi_new - diff;
+    end
+    phi_out(i) = phi_new(i);
+end
+phi_out = phi_out * pi / 180;
+end
+
 %% 绘制优化后路径
 function [] = draw_optimised_path(track_x,track_y,vector,alpha,color_inpt)
 figure(1);
@@ -265,7 +379,6 @@ plot(p_x,p_y,color_inpt);
 xlabel('x\\m');
 ylabel('y\\m');
 title('track and path');
-legend('中心线','左边界','右边界','起点','障碍','最小曲率路径');
 end
 
 %% 线性插值赛道 前处理
@@ -475,6 +588,191 @@ end
 
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%控制子函数%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% 状态更新矩阵
+function [A,B] = state_update_matrix_gen(x_act,control_act,body,t)
+l = body.l / 1000;
+theta = x_act(3);
+v = control_act(1);
+delta = control_act(2);
+A = [1,0,-v * sin(theta) * t
+    0,1,v * cos(theta) * t
+    0,0,1];
+B = [t * cos(theta),0
+    t * sin(theta),0
+    t * tan(delta) / l,(v * t) / (l * cos(delta)^2)];
+end
+
+%% 序列增量矩阵生成
+function [At,Bt] = sequential_increment_matrix_gen(x_act,control_act,Ct,np,nc,body,t)
+[Ar,Br] = state_update_matrix_gen(x_act,control_act,body,t);
+%将控制变量包含进来，详见《无人驾驶车辆模型预测控制》第三章
+A = [Ar,Br;zeros(size(Br,2),size(Ar,2)),eye(size(Br,2))];
+B = [Br;eye(size(Br,2))];
+At = [A];
+Bt = [B];
+temp = [B];
+%计算控制序列矩阵
+for j = 1:np - 1
+    At = [A;At * A];
+    temp = [A * temp,B];
+    Bt = [Bt,zeros(size(Bt,1),size(B,2));temp];
+end
+At = Ct * At;
+Bt = Ct * Bt(:,1:2 * nc);
+end
+
+%% 权重矩阵生成
+function [Qt,Rt,Ct,rou] = weight_matrix_gen(nx,nu,np,nc)
+Q = eye(nx);%状态变量权重
+R = eye(nu);%控制变量权重
+rou = 100;%松弛因子
+c = [eye(nx),zeros(nx,nu)];%观察矩阵
+Qt = kron(eye(np),Q);
+Rt = kron(eye(nc),R);
+Ct = kron(eye(np),c);
+end
+
+%% 查找参考
+function [state_ref_err,index] = find_state_ref_err(para_x,para_y,state_ref,current_state,travel,c)
+% state_ref = [track_x,track_y,phi,curvature_res,vel_flying,path_distance];%参考状态
+%程序分三个部分
+%1.根据里程表找到临近区间
+%2.找最可能的位置区间
+%3.在区间内找到最进的点
+select_c = 2 * [zeros(c),zeros(c),eye(c),zeros(c)];
+Mx = select_c * para_x;
+My = select_c * para_y;
+track_x = state_ref(:,1);
+track_y = state_ref(:,2);
+phi = state_ref(:,3);
+path_distance = state_ref(:,6);
+% ↓根据里程表找临近区间
+i = 1;
+while (i <= c) && (travel >= path_distance(i))%找到近似里程点
+    i = i + 1;
+end
+% ↓找出最可能区间
+lwr_ran = max(1,i - 5);%附近路段标号，前后5tolerance距离
+upr_ran = min(c,i + 5);
+distance = zeros(upr_ran - lwr_ran + 1,1);
+for i = lwr_ran:upr_ran
+    distance(i + 1 - lwr_ran) = (current_state(1) - track_x(i))^2 + (current_state(2) - track_y(i))^2;
+end
+pos = find(distance == min(distance));%找最近离散点
+if (pos > 2) && (pos < upr_ran - lwr_ran + 1) && (distance(pos + 1) > distance(pos - 1))
+    pos = pos - 1;%确定区间
+end
+if pos == upr_ran - lwr_ran + 1
+    pos = pos - 1;
+end
+% ↓在区间中插值找临近点
+pos = pos + lwr_ran - 1;%将pos转换为全局标记
+phi_ref = (phi(pos + 1) + phi(pos)) / 2;%临时写的航向角，不准确
+index = pos;%当前段
+val = [0:0.01:1]';
+[size_val,~] = size(val);
+distance = zeros(size_val,1);
+Mx_0 = Mx(pos);
+Mx_1 = Mx(pos + 1);
+My_0 = My(pos);
+My_1 = My(pos + 1);
+track_x_0 = track_x(pos);
+track_x_1 = track_x(pos + 1);
+track_y_0 = track_y(pos);
+track_y_1 = track_y(pos + 1);
+x_ran = Mx_0 * (1 - val).^3 / 6 ...%三次样条插值x
+    + Mx_1 * (val - 0).^3 / 6 ...
+    + (track_x_0 - Mx_0 / 6) .* (1 - val) ...
+    + (track_x_1 - Mx_1 / 6) .* (val - 0);
+y_ran = My_0 * (1 - val).^3 / 6 ...%三次样条插值y
+    + My_1 * (val - 0).^3 / 6 ...
+    + (track_y_0 - My_0 / 6) .* (1 - val) ...
+    + (track_y_1 - My_1 / 6) .* (val - 0);
+for i = 1:size_val
+    distance(i) = sqrt((current_state(1) - x_ran(i))^2 + (current_state(2) - y_ran(i))^2);
+end
+pos = find(distance == min(distance));%实际赛道上最近的点
+%↓因为用了累积航向角，所以以下代码作废
+% val = val(pos);%最小距离点曲线坐标
+% x_d = -Mx_0 * (1 - val)^2 / 2 ...%计算当前航向角
+%     + Mx_1 * (val - 0)^2 ...
+%     + track_x_1 - track_x_0 ...
+%     - (Mx_1 - Mx_0) / 6;
+% y_d = -My_0 * (1 - val)^2 / 2 ...
+%     + My_1 * (val - 0)^2 ...
+%     + track_y_1 - track_y_0 ...
+%     - (My_1 - My_0) / 6;
+% phi_ref = atan(y_d / x_d);
+state_ref = zeros(3,1);%回收state_ref
+state_ref(1) = x_ran(pos);
+state_ref(2) = y_ran(pos);
+state_ref(3) = phi_ref;
+state_ref_err = current_state - state_ref;
+end
+
+%% 更新车辆实际状态(控制模型)
+%只是最简单的更新方式，可以换成其他的
+function [x_act,travel] = update_state(x_now,control,t,l,travel)
+x_act = zeros(3,1);
+x_act(1) = x_now(1) + control(1) * cos(x_now(3)) * t;
+x_act(2) = x_now(2) + control(1) * sin(x_now(3)) * t;
+x_act(3) = x_now(3) + control(1) * tan(control(2)) / l * t;
+travel = travel + sqrt((x_act(1) - x_now(1))^2 + (x_act(2) - x_now(2))^2);
+end
+
+%% 生成当前点约束
+%根据当前实际控制量生成约束
+function [A_eqst,b_eqst,A_ieqst,b_ieqst,lb,ub] = get_constrains(u_max,u_min,du_max,du_min,control_act,nc,nu)
+A_eqst = [];%等式约束A
+b_eqst = [];%等式约束b
+A_base = tril(ones(nc));
+A_ieqst = [kron(A_base,eye(nu)),zeros(nc * nu,1)];%最后一列是忽略松弛变量
+A_ieqst = [A_ieqst;-1 * A_ieqst];%不等式约束A
+b_base = ones(nc,1);
+Umax = kron(b_base,u_max);
+Umin = kron(b_base,u_min);
+Ut = kron(b_base,control_act);
+b_ieqst = [Umax - Ut;Ut - Umin];%不等式约束b，控制变量差之和的富余量
+M = 10;%松弛变量限制
+DU_max = kron(b_base,du_max);
+DU_min = kron(b_base,du_min);
+lb = [DU_min;0];%控制变量差上下界
+ub = [DU_max;M];
+end
+
+%% 绘制车身姿态
+function draw_body_attitude(x_res,control,travel_history,body)
+figure(1);
+w = body.Wb / 2000;
+l = body.lb / 2000;
+[c,~] = size(x_res);
+select_x = kron(eye(5),[1,0]);
+select_y = kron(eye(5),[0,1]);
+corner_loca = [l;w;-l;w;-l;-w;l;-w;l;w];
+for i = 1:5:c%绘制车身四角
+    rotate_matrix_base = [cos(x_res(i,3)),-sin(x_res(i,3));
+        sin(x_res(i,3)),cos(x_res(i,3))];
+    rotate_matrix = kron(eye(5),rotate_matrix_base);
+    corner = kron(ones(5,1),[x_res(i,1);x_res(i,2)]) + rotate_matrix * corner_loca;
+    x = select_x * corner;
+    y = select_y * corner;
+    plot(x,y,'k');
+    hold on;
+end
+legend('中心线','左边界','右边界','起点','障碍','最小曲率路径');
+figure(2);
+subplot(2,1,1);
+hold on;
+plot(travel_history(1:end - 1),control(2:end,1),'b');%绘制节气门历史
+hold on;
+legend('profile','history');
+subplot(2,1,2);
+hold on;
+plot(travel_history(1:end - 1),control(2:end,2),'b');%绘制转角历史
+hold on;
+legend('profile','history');
+end
 
 %%
 %%
