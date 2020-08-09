@@ -1,19 +1,15 @@
 # Results  
 <div  align="center">    
-	<img src="./pics/track.png"  alt="赛道、障碍及最小曲率路径" align=center />  
+	<img src="./pics/mpc_result.png"  alt="赛道、障碍及最小曲率路径" align=center />  
  </div>
    
  
 <div  align="center">    
-	<img src="./pics/velocity_profile.png"  alt="速度规划" align=center />  
+	<img src="./pics/mpc_control.png"  alt="速度规划" align=center />  
  </div>
    
   
-<div  align="center">    
-	<img src="./pics/Houston_we_have_a_problem.png"  alt="速度规划" align=center />  
- </div>
-   
- 
+
 # View result  
 to view result, run main_prog.m  
 # Update logs  
@@ -24,4 +20,5 @@ to view result, run main_prog.m
 # Current issues  
 - 20200806 velocity profile didn't consider initial speed and speed at start is higher than speed at the end, which is impossible even for flying laps.  
 solved  
-- 20200806 MPC control results a funny behaviour, may be the heading reference problem, use the heading vector as reference may solve the problem.  
+- 20200806 MPC control results a funny behaviour (see./pics/Houston_we_have_a_problem.png for detail), may be the heading reference problem, use the heading vector as reference may solve the problem.  
+solved use accumulated heading angle
