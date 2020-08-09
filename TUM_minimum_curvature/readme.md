@@ -10,6 +10,11 @@
    
   
 
+<div  align="center">    
+	<img src="./pics/boundary_violation.png"  alt="速度规划" align=center />  
+ </div>
+   
+ 
 # View result  
 to view result, run main_prog.m  
 # Update logs  
@@ -21,4 +26,5 @@ to view result, run main_prog.m
 - 20200806 velocity profile didn't consider initial speed and speed at start is higher than speed at the end, which is impossible even for flying laps.  
 solved  
 - 20200806 MPC control results a funny behaviour (more details: https://github.com/guannan-he/pathPlanningPaperAndCodes/blob/master/TUM_minimum_curvature/pics/Houston_we_have_a_problem.png), may be the heading reference problem, use the heading vector as reference may solve the problem.  
-solved by using accumulated heading angle
+solved by using accumulated heading angle  
+- 20200809 boundary violation in some corner
