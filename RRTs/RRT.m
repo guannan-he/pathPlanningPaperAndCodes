@@ -15,7 +15,6 @@ threshold = 20;
 maxFailCnt = 10000;
 failCnt = 0;
 pathFound = false;
-pointCnt = 0;
 display = true;
 RRTree = double([source, -1]);
 pathPoint = [goal];
