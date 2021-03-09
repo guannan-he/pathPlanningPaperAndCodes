@@ -61,7 +61,7 @@ while size(queue) ~= 0
         end
     end
     image(map);
-    pause(0.0001);
+%     pause(0.0001);
     if fastClose
         if ~isinf(H(endIndex))
             tTotal = toc;
@@ -77,7 +77,7 @@ while currentIndex ~= 0
     map(currentIndex) = 5;
     currentIndex = curMap(currentIndex);
     image(map);
-    pause(0.0001);
+%     pause(0.0001);
 end
 %% 后处理杂项
 map(startIndex) = 4;%标记起点
