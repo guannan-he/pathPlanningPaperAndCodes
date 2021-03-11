@@ -14,9 +14,17 @@
 	<img src="./image/3.bmp"  alt="result" align=center />  
  </div>
   
+* execution time comparasion  
+  <div  align="center">    
+	<img src="./image/matlab.jpg"  alt="matlab" align=center />  
+ </div>
   
-# distros  
-1.matlab 5603ms (20210120)  
+  <div  align="center">    
+	<img src="./image/c++.jpg"  alt="c++" align=center />  
+ </div>
+  
+# distros   
+1.matlab 33ms (20210311)  
 2.c++  156ms (20210309)  
 # references  
 [教程-知乎](https://zhuanlan.zhihu.com/p/51112799)  

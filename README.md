@@ -6,7 +6,19 @@
   
 # available languages  
 1. matlab  
-2. C++  
+2. C++   
+
+# change logs  
+20200721 sqp  
+20200725 贝塞尔曲线  
+20200730 quadratic bezier  
+20200802 QP minimum curvature  
+20201126 RRT  
+20201230 state lattice  
+20210119 dijkstra  
+20200120 Astar  
+20210309 dijkstra c++ build  
+20210311 Astar c++ build  
 
 
 

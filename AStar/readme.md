@@ -13,7 +13,25 @@
 <div  align="center">    
 	<img src="./image/3.bmp"  alt="result" align=center />  
  </div>
+ 
+<div  align="center">    
+	<img src="./image/result.bmp"  alt="result" align=center />  
+ </div>
+ 
+notice: c++ and matlab have different results due to different sort methods  
+   
+* execution time comparasion  
+  <div  align="center">    
+	<img src="./image/matlab.jpg"  alt="matlab" align=center />  
+ </div>
   
+  <div  align="center">    
+	<img src="./image/c++.jpg"  alt="c++" align=center />  
+ </div>
+  
+# distros  
+1.matlab 32ms (20210311)  
+2.c++  156ms (20210311) 
 # references  
 [教程-segmentfault](https://segmentfault.com/a/1190000017839112)  
 [参考-维基百科-A*搜尋演算法](https://zh.wikipedia.org/wiki/A*%E6%90%9C%E5%B0%8B%E6%BC%94%E7%AE%97%E6%B3%95)  

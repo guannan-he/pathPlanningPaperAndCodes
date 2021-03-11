@@ -12,6 +12,7 @@ cmap = [
     1 1 0];% 5 - yellow -  到目标点的路径
 colormap(cmap);
 fid = "map.bmp";
+tic;
 map = int8(imbinarize(imread(fid)));
 image(map);
 %% 参数设置
@@ -25,14 +26,14 @@ curMap = zeros(size(map));% 指针路径
 G(startIndex) = 0;% 初始点置零
 for i = 1: 2500
     cur = index2RolCol(i, 50);
-    H(i) = 2 * (abs(cur(1) - 48) + abs(cur(2) - 48));
+    H(i) = 2 * (abs(cur(1) - 48) + 2 * abs(cur(2) - 48));
     G(i) = abs(cur(1) - 5) + abs(cur(2) - 5);
 end
 
 map(startIndex) = 4;%标记起点
 map(endIndex) = 4;%标记终点
-image(map);
-print(1,'-dbmp',sprintf('image/%d',1));
+% image(map);
+% print(1,'-dbmp',sprintf('image/%d',1));
 fastClose = 1;% 快速结束（终点是全局最小就停止更新）
 %% 主循环 BFS
 direction = [
@@ -41,7 +42,7 @@ direction = [
     1, 0;
     0, -1];
 queue = [startIndex, H(startIndex) + G(startIndex)];%出发点ID入队列
-tic;
+
 while size(queue, 1) ~= 0
     currentIndex = queue(1, 1);
     if fastClose
@@ -71,24 +72,25 @@ while size(queue, 1) ~= 0
         curMap(tmpIndex) = currentIndex;
     end
     queue = sortrows(queue, 2); % 对queue排序
-    image(map);
-    pause(0.0001);
+%     image(map);
+%     pause(0.0001);
 end
-tTotal = toc;
-print(1,'-dbmp',sprintf('image/%d',2));
+
+% print(1,'-dbmp',sprintf('image/%d',2));
 %% 绘制轨迹
 currentIndex = endIndex;
 while currentIndex ~= 0
     map(currentIndex) = 5;
     currentIndex = curMap(currentIndex);
-    image(map);
-    pause(0.0001);
+%     image(map);
+%     pause(0.0001);
 end
 %% 后处理杂项
 map(startIndex) = 4;%标记起点
 map(endIndex) = 4;%标记终点
+tTotal = toc;
 image(map);
-print(1,'-dbmp',sprintf('image/%d',3));
+% print(1,'-dbmp',sprintf('image/%d',3));
 fprintf("Done!\n");
 fprintf("路径长度%d\n", H(endIndex));
 fprintf("耗时%f秒\n", tTotal);
