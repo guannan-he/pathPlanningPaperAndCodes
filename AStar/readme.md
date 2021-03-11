@@ -14,11 +14,12 @@
 	<img src="./image/3.bmp"  alt="result" align=center />  
  </div>
  
+ 
+notice: c++ and matlab have different results due to different sort methods  
 <div  align="center">    
 	<img src="./image/result.bmp"  alt="result" align=center />  
  </div>
  
-notice: c++ and matlab have different results due to different sort methods  
    
 * execution time comparasion  
   <div  align="center">    
