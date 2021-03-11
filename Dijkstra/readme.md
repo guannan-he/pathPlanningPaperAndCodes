@@ -16,7 +16,7 @@
   
 * execution time comparasion  
   <div  align="center">    
-	<img src="./image/matlab.jpg"  alt="matlab" align=center />  
+	<img src="./image/matlab.png"  alt="matlab" align=center />  
  </div>
   
   <div  align="center">    

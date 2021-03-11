@@ -22,11 +22,11 @@ notice: c++ and matlab have different results due to different sort methods
    
 * execution time comparasion  
   <div  align="center">    
-	<img src="./image/matlab.jpg"  alt="matlab" align=center />  
+	<img src="./image/matlab.png"  alt="matlab" align=center />  
  </div>
   
   <div  align="center">    
-	<img src="./image/c++.jpg"  alt="c++" align=center />  
+	<img src="./image/c++.png"  alt="c++" align=center />  
  </div>
   
 # distros  
