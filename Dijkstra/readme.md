@@ -8,6 +8,9 @@
 or type:  
 `./dijkstra -h`  
 for help  
+notice:  
+io.h might be needed for some different ubuntu versions, use this command only if include error occured:  
+`mv ./io.h /usr/include/io.h`  
 # results  
 * original map  
 <div  align="center">    
