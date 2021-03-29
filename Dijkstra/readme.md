@@ -1,3 +1,13 @@
+# build  
+1. open a new terminal in dijkstraTx2Build folder and type:  
+`cmake .`  
+2. then type:  
+`make`  
+3. to run this program type:  
+`./dijkstra [sourcename.bmp] [reultname.bmp] [points.txt]`  
+or type:  
+`./dijkstra -h`  
+for help  
 # results  
 * original map  
 <div  align="center">    
@@ -24,8 +34,9 @@
  </div>
   
 # distros   
-1.matlab 33ms (20210311)  
-2.c++  156ms (20210309)  
+1. matlab 33ms (20210311)  
+2. c++ (windows) 156ms (20210309)  
+3. c++ (tx2)  
 # references  
 [教程-知乎](https://zhuanlan.zhihu.com/p/51112799)  
 [参考-维基百科-戴克斯特拉算法](https://zh.wikipedia.org/wiki/%E6%88%B4%E5%85%8B%E6%96%AF%E7%89%B9%E6%8B%89%E7%AE%97%E6%B3%95)  

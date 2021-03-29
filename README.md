@@ -6,7 +6,7 @@
   
 # available languages  
 1. matlab  
-2. C++   
+2. C++ (windows and ubuntu-tx2)  
 
 # change logs  
 20200721 sqp  
@@ -18,7 +18,9 @@
 20210119 dijkstra  
 20200120 Astar  
 20210309 dijkstra c++ build  
-20210311 Astar c++ build  
+20210311 Astar c++ build    
+20210329 dijkstra and aStar tx2 build  
+
 
 
 
